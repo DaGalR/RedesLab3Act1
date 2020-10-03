@@ -5,6 +5,7 @@ import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 
@@ -15,6 +16,7 @@ import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.security.DigestInputStream;
 import java.security.MessageDigest;
 
 public class mainCliente {
@@ -65,6 +67,7 @@ public class mainCliente {
 				
 				//LLAMADO A METODO PARA RECIBIR ARCHIVO
 				descargar(socket, id, nombreArchivo);
+				System.out.println("terminé descarga :D");
 			}
 			else {
 				System.out.println("Falla de servidor");
@@ -95,7 +98,6 @@ public class mainCliente {
 			
 			//CANAL DE LECTURA DE ARCHIVO 
 			FileOutputStream fos = new FileOutputStream(DIR_DESCARGA + arch);
-			//DataInputStream dis = new DataInputStream(s.getInputStream());
 			BufferedOutputStream bos = new BufferedOutputStream(fos);
 			InputStream is = s.getInputStream();
 			//DataOutputStream dout = new DataOutputStream(s.getOutputStream());
@@ -103,8 +105,10 @@ public class mainCliente {
 			byte[] buffer = new byte[70000000];
 			
 			//RECEPCION DE HASH DEL SERVIDOR
-			//String hashServidor = dis.readUTF();
-			//System.out.println("hash recibido server " + hashServidor);
+			
+			DataInputStream dis = new DataInputStream(s.getInputStream());
+			String hashServidor = dis.readUTF();
+			System.out.println("hash recibido server " + hashServidor);
 			
 			//LEE EN BUFFER
 			bytesLeidos = is.read(buffer, 0, buffer.length);
@@ -126,20 +130,28 @@ public class mainCliente {
 			//dout.writeInt(1);
 			
 			//VERIFICACION DE INTEGRIDAD DE ARCHIVO
+			
+			//VERSION PRUEBA
+			MessageDigest sha = MessageDigest.getInstance("SHA-256");
+			String hashCliente = checksum(DIR_DESCARGA+arch, sha);
+			//System.out.println("Hexa cliente " +  hashCliente);
+			System.out.println("Comenzando a verificar integridad de archivo descargado...");
+			//VERSION ALTERNA
 			/*
 			System.out.println("Comenzando a verificar integridad de archivo descargado...");
 			File descargado = new File(DIR_DESCARGA+arch);
 			MessageDigest sha = MessageDigest.getInstance("SHA-256");
 			byte[] checksum = sha.digest(new byte[(int) descargado.length()]);
 			String hashCliente = new String(checksum);
-			
-			if(hashCliente == hashServidor) {
+			*/
+			if(hashCliente.equals(hashServidor)) {
 				System.out.println("El archivo recibido ha sido examinado y no ha sido manipulado.");
 			}
 			else {
 				System.out.println("¡¡ADVERTENCIA!! El archivo descargado no es igual al original");
 			}
-			*/
+			
+			dis.close();
 			bos.close();
 			fos.close();
 			s.close();
@@ -149,5 +161,19 @@ public class mainCliente {
 			e.printStackTrace();
 		}
 		
+	}
+	
+	public static String checksum(String ruta, MessageDigest md) throws IOException{
+		try (DigestInputStream dis = new DigestInputStream(new FileInputStream(ruta), md)) {
+            while (dis.read() != -1) ; //empty loop to clear the data
+            md = dis.getMessageDigest();
+        }
+
+        // bytes to hex
+        StringBuilder result = new StringBuilder();
+        for (byte b : md.digest()) {
+            result.append(String.format("%02x", b));
+        }
+        return result.toString();
 	}
 }

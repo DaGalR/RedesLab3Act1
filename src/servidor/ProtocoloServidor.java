@@ -15,6 +15,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.security.DigestInputStream;
 import java.security.KeyPair;
 import java.security.MessageDigest;
 import java.security.cert.X509Certificate;
@@ -72,7 +73,21 @@ public class ProtocoloServidor implements Runnable{
 		}
 
 	}
+	
+	private String checksum(String ruta, MessageDigest md ) throws IOException{
+		try (DigestInputStream dis = new DigestInputStream(new FileInputStream(ruta), md)) {
+            while (dis.read() != -1) ; //empty loop to clear the data
+            md = dis.getMessageDigest();
+        }
 
+        // bytes to hex
+        StringBuilder result = new StringBuilder();
+        for (byte b : md.digest()) {
+            result.append(String.format("%02x", b));
+        }
+        return result.toString();
+	}
+	
 	@Override
 	public void run() {
 
@@ -91,16 +106,24 @@ public class ProtocoloServidor implements Runnable{
 			byte[] buffer = new byte[(int) file.length()];
 			FileInputStream fi = new FileInputStream(file);
 			BufferedInputStream bis = new BufferedInputStream(fi);
-			//DataOutputStream dos = new DataOutputStream(sc.getOutputStream());
 			//DataInputStream dis = new DataInputStream(sc.getInputStream());
 			bis.read(buffer, 0, buffer.length);
 			OutputStream os = sc.getOutputStream();
 			
 			//GENERA HASH DEL ARCHIVO PARA COMPROBACION
+			
+			//VERSION PRUEBA
+			MessageDigest md = MessageDigest.getInstance("SHA-256");
+			String hexa = checksum(file.getPath(), md);
+			//System.out.println("Hexa serv " + hexa);
+			DataOutputStream dos = new DataOutputStream(sc.getOutputStream());
+			dos.writeUTF(hexa);
+			//VERSION ALTERNA
 			/*
 			MessageDigest sha = MessageDigest.getInstance("SHA-256");
 			byte[] checksum = sha.digest(buffer);
 			String hashEnviar = new String(checksum);
+			DataOutputStream dos = new DataOutputStream(sc.getOutputStream());
 			dos.writeUTF(hashEnviar);
 			System.out.println("Hash generado server " + hashEnviar);
 			*/
