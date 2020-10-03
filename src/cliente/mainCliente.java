@@ -26,6 +26,7 @@ public class mainCliente {
 	public static String DIR_DESCARGA = "data/descargas/";
 	public static int TAM_BUFFER = 1024;	
 	
+	
 	public static void main(String[] args) throws IOException{
 		
 		//COMIENZA EJECUCION EN MAQUINA CLIENTE
