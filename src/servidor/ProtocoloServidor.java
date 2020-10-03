@@ -25,30 +25,28 @@ public class ProtocoloServidor implements Runnable{
 	//Rutas de archivos
 	private static String ARCHIVO_1 = "data/archivos/ElAñañin.mp4";
 	private static String ARCHIVO_2 = "data/archivos/toadload.wav";
+	
+	//Constantes
+	private static int TAM_PAQUETE = 1024;
 
 	//Atributos
 	private Socket sc = null;
-	private String dlg;
 	private int idP;
 	private long time_start, time_end, time;
-	private static File file;
+	private static File fileLog;
 	private int archivo;
-	/*
-	 * Metodo init para asignar el archivo de log
-	 */
-	public static void init(File pFile) {
-		file = pFile;
-	}
+
 
 	/*
 	 * Constructor del protocolo del servidor
 	 * @param: csP socket designado
 	 * @param: idP Numero de thread que atiende
 	 */
-	public ProtocoloServidor (Socket csP, int idP, int numArchivo) {
+	public ProtocoloServidor (Socket csP, int idP, int numArchivo, File archivoLog) {
+		
+		fileLog = archivoLog;
 		sc = csP;
 		this.idP=idP;
-		dlg = new String("Delegado " + idP);
 		archivo = numArchivo;
 		this.run();
 
@@ -60,12 +58,12 @@ public class ProtocoloServidor implements Runnable{
 	 * - Debe conservar el metodo . 
 	 * - Es el ÃƒÂºnico metodo permitido para escribir en el log.
 	 */
-	private void escribirMensaje(String pCadena) {
-		synchronized(file)
+	private void escribirLog(String pCadena) {
+		synchronized(fileLog)
 		{
 			try {
-				FileWriter fw = new FileWriter(file,true);
-				fw.write(pCadena + "\n");
+				FileWriter fw = new FileWriter(fileLog,true);
+				fw.append(pCadena + "\n");
 				fw.close();
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -74,6 +72,13 @@ public class ProtocoloServidor implements Runnable{
 
 	}
 	
+	/**
+	 * Método que genera hash para verificar inttegridad
+	 * @param ruta ruta del archivo
+	 * @param md MessageDigest que iene el algoritmo
+	 * @return String hexadecimal con hash de archivo
+	 * @throws IOException si falla lectura de archivo
+	 */
 	private String checksum(String ruta, MessageDigest md ) throws IOException{
 		try (DigestInputStream dis = new DigestInputStream(new FileInputStream(ruta), md)) {
             while (dis.read() != -1) ; //empty loop to clear the data
@@ -92,7 +97,6 @@ public class ProtocoloServidor implements Runnable{
 	public void run() {
 
 		try {
-			int cuenta;
 			
 			//RECUPERA EL ARCHIVO A ENVIAR
 			File file;
@@ -103,11 +107,10 @@ public class ProtocoloServidor implements Runnable{
 				file = new File(ARCHIVO_2);
 			}
 			//CREA BUFFER Y CANALES DE COMUNICACION EN SOCKET
-			byte[] buffer = new byte[(int) file.length()];
+			byte[] archivoBytes = new byte[(int) file.length()];
 			FileInputStream fi = new FileInputStream(file);
 			BufferedInputStream bis = new BufferedInputStream(fi);
-			//DataInputStream dis = new DataInputStream(sc.getInputStream());
-			bis.read(buffer, 0, buffer.length);
+			bis.read(archivoBytes, 0, archivoBytes.length);
 			OutputStream os = sc.getOutputStream();
 			
 			//GENERA HASH DEL ARCHIVO PARA COMPROBACION
@@ -118,27 +121,37 @@ public class ProtocoloServidor implements Runnable{
 			//System.out.println("Hexa serv " + hexa);
 			DataOutputStream dos = new DataOutputStream(sc.getOutputStream());
 			dos.writeUTF(hexa);
-			//VERSION ALTERNA
-			/*
-			MessageDigest sha = MessageDigest.getInstance("SHA-256");
-			byte[] checksum = sha.digest(buffer);
-			String hashEnviar = new String(checksum);
-			DataOutputStream dos = new DataOutputStream(sc.getOutputStream());
-			dos.writeUTF(hashEnviar);
-			System.out.println("Hash generado server " + hashEnviar);
-			*/
-			
+			dos.writeInt((int)file.length());
 			//NOTIFICA ENVIO DE ARCHIVO Y COMIENZA PROCESO
-			System.out.println("Enviando "+ file.getName() + " tamano: " + buffer.length + " Bytes");
-			os.write(buffer,0,buffer.length);
-			os.flush();
+			System.out.println("Enviando "+ file.getName() + " tamano: " + archivoBytes.length + " Bytes");
+			
+			int enviados = 0;
+			time_start = System.currentTimeMillis();
+			for(int i = 0; i <= file.length() - (file.length() % TAM_PAQUETE) ; i+=TAM_PAQUETE ) {
+				if(i == file.length() - (file.length() % TAM_PAQUETE)) {
+					os.write(archivoBytes, i, (int)file.length() % TAM_PAQUETE);
+				}
+				else {
+					os.write(archivoBytes, i, TAM_PAQUETE);
+				}
+				enviados++;
+			}
+			
 			
 			//NOTIFICA TERMINACION DE ENVIO Y RECEPCION DEL ARCHIVO POR PARTE EL CLIENTE
-			/*
-			if(dis.readInt() == 1) {
+			DataInputStream dis = new DataInputStream(sc.getInputStream());
+			if(dis.readByte() == 1) {
+				time_end = System.currentTimeMillis();
+				time = time_end - time_start;
+				String cadena = "Entrega de archivo a cliente " + idP + " fue exitosa. Tomó " + time / 1000 + " segundos";
+				escribirLog(cadena);
+				cadena = "Paquetes enviados " + enviados + " se enviaron " + (int) file.length() + " Bytes";
+				escribirLog(cadena);
+				cadena = "Paquetes recibidos " + enviados + " se recibieron " + (int) file.length() + " Bytes";
+				escribirLog(cadena);
 				System.out.println("Envío de archivo terminado. Cliente ya lo recibió.");
 			}
-			*/
+			dis.close();
 			bis.close();
 			os.close();
 			sc.close();
